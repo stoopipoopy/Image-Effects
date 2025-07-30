@@ -36,9 +36,12 @@ def blurManual(img, sig = 1., l = 5):
     return blur1, blur2
 
 def blurTaoist(img, sig = 1., l = 5, tao = 2.):
+    etf = structureTensor(img, sigma=sig)
     kernel1, kernel2 = generateGaussianKernel((1 + tao) * sig, l), generateGaussianKernel(sig * tao, l)
     blur1 = cv.filter2D(img, -1, kernel1)
+    blur1 = ETFBlur(img, etf, radius=5)
     blur2 = cv.filter2D(img, -1, kernel2)
+    blur2 = ETFBlur(img, etf, radius=10)
     return blur1, blur2
 
 def structureTensor(img, sigma=1.0):
@@ -103,6 +106,8 @@ def dogManual(img, sig = 1., l = 5, threshold = 8, phi = 1.):
                 diff[i,j] = 1 + np.tanh(phi * (diff[i, j] - threshold))
     return diff
 
+
+
 def germanDog(img, sig = 1., l = 5, threshold = 8, tao = 2., phi = 1.):
     gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
     blur1, blur2 = blurTaoist(gray, sig, l, tao)
@@ -144,9 +149,8 @@ def onChange(val):
     tao = max(0.1, taoRaw / 10.0)
     phi = max(0.1, phiRaw / 10.0)
     print(phi)
-    #result = germanDog(img, sig=sigma, l=ksize, threshold=threshold, tao = tao, phi = phi)
-    etf = structureTensor(img)  
-    result = ETFBlur(img, etf, radius=5)
+    result = germanDog(img, sig=sigma, l=ksize, threshold=threshold, tao = tao, phi = phi)
+    
 
     
     if smooth_toggle:
