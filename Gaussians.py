@@ -41,6 +41,57 @@ def blurTaoist(img, sig = 1., l = 5, tao = 2.):
     blur2 = cv.filter2D(img, -1, kernel2)
     return blur1, blur2
 
+def structureTensor(img, sigma=1.0):
+    gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
+    # Compute image gradients
+    Ix = cv.Sobel(gray, cv.CV_64F, 1, 0, ksize=3)
+    Iy = cv.Sobel(gray, cv.CV_64F, 0, 1, ksize=3)
+
+    Ixx = cv.GaussianBlur(Ix * Ix, (0, 0), sigma)
+    Ixy = cv.GaussianBlur(Ix * Iy, (0, 0), sigma)
+    Iyy = cv.GaussianBlur(Iy * Iy, (0, 0), sigma)
+
+    h, w = gray.shape
+    eigvecs = np.zeros((h, w, 2), dtype=np.float32)
+
+    for y in range(h):
+        for x in range(w):
+            S = np.array([[Ixx[y, x], Ixy[y, x]],
+                          [Ixy[y, x], Iyy[y, x]]])
+            eigvals, eigvec = np.linalg.eigh(S)
+            dominant = eigvec[:, np.argmax(eigvals)]
+            eigvecs[y, x] = dominant
+
+    return eigvecs 
+def ETFBlur(img, etf, radius=5):
+    gray = cv.cvtColor(img, cv.COLOR_RGB2GRAY)
+    h, w = gray.shape
+    blurred = np.zeros_like(gray, dtype=np.float32)
+
+    for y in range(h):
+        for x in range(w):
+            acc = 0.0
+            weight_sum = 0.0
+
+            for s in range(-radius, radius + 1):
+                dx, dy = etf[y, x]
+                norm = np.sqrt(dx*dx + dy*dy) + 1e-6
+                dir_x = dx / norm
+                dir_y = dy / norm
+
+                sample_x = int(round(x + s * dir_x))
+                sample_y = int(round(y + s * dir_y))
+
+                if 0 <= sample_x < w and 0 <= sample_y < h:
+                    weight = np.exp(-s*s / (2 * (radius/2)**2)) 
+                    acc += gray[sample_y, sample_x] * weight
+                    weight_sum += weight
+
+            blurred[y, x] = acc / weight_sum if weight_sum > 0 else gray[y, x]
+
+    return np.uint8(np.clip(blurred, 0, 255))
+
+
 def dogManual(img, sig = 1., l = 5, threshold = 8, phi = 1.):
     blur1, blur2 = blurManual(img, sig, l)
     diff = cv.absdiff(blur2, blur1)
@@ -64,9 +115,9 @@ def germanDog(img, sig = 1., l = 5, threshold = 8, tao = 2., phi = 1.):
                 result[i, j] = 255
             else:
                 val = 1 + np.tanh(phi * (diff[i, j] - tao))
-                #val = np.clip(val * 127.5, 0, 255)
+                val = np.clip(val * 127.5, 0, 255)
                 result[i, j] = val.astype(np.uint8)
-    return diff
+    return result
 
 
 def edgeSmoothing(img):
@@ -93,8 +144,11 @@ def onChange(val):
     tao = max(0.1, taoRaw / 10.0)
     phi = max(0.1, phiRaw / 10.0)
     print(phi)
-    result = germanDog(img, sig=sigma, l=ksize, threshold=threshold, tao = tao, phi = phi)
+    #result = germanDog(img, sig=sigma, l=ksize, threshold=threshold, tao = tao, phi = phi)
+    etf = structureTensor(img)  
+    result = ETFBlur(img, etf, radius=5)
 
+    
     if smooth_toggle:
         result = edgeSmoothing(result)
 
